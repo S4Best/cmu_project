@@ -1,0 +1,14 @@
+{
+	"num_port": 2222,
+	"plate_db_path": "db/licenseplate.db",
+	"account_db_path": "db/account.db",
+	"otpbase_db_path": "db/otpbase.db",
+	"plate_db_key_path": "keys/encKey/plate_key_enc.json",
+	"account_db_key_path": "keys/encKey/account_key_enc.json",
+	"otpbase_db_key_path": "keys/encKey/otpbase_key_enc.json",
+	"server_cert_path": "keys/server/server.cert",
+	"server_key_path": "keys/server/server.key",
+	"ca_cert_path": "keys/ca/chain.crt",
+	"num_thr_partial": 70,
+	"max_connection": 10
+}
