@@ -248,7 +248,6 @@ void responseLoginResult(TTcpConnectedPort* ConPort, string response) {
         printf("responseLoginResult : WriteDataTcp %d\n", result);
     if ((result = WriteDataTcp(ConPort, (unsigned char*)response.c_str(), sendlength)) != sendlength)
         printf("responseLoginResult : WriteDataTcp %d\n", result);
-    printf("sent ->%s\n", (char*)response.c_str());
 }
 
 
@@ -328,7 +327,6 @@ void process_data(TTcpConnectedPort* ConPort)
             printf("ReadDataTcp 2 error\n");
             goto free_resource;
         }
-        printf("Payload is : %s\n", Payload);
 
         switch (PacketCmd)
         {
@@ -341,7 +339,6 @@ void process_data(TTcpConnectedPort* ConPort)
                 goto free_resource;
             }
 
-            printf("log-in Payload raw: : %s\n", Payload);
             AccountRequest accountReq = Account::getAccountRequestByJsonString(Payload);
 
             if (accountReq.userId.empty() || accountReq.password.empty() || accountReq.otp.empty()) {
@@ -492,7 +489,9 @@ void process_data(TTcpConnectedPort* ConPort)
                 }
             }
             if (max_score > ConfData->num_thr_partial) {
-                printf("Payload=%s, Plate Number=%s, Matching Rate=%.2lf%%\n", Payload, max_plate.c_str(), max_score);
+                if (ConfData->debug) {
+                    printf("Payload=%s, Plate Number=%s, Matching Rate=%.2lf%%\n", Payload, max_plate.c_str(), max_score);
+                }
                 int sendlength = (int)(max_data.length() + 1);
                 int SendMsgHdr[2];
                 SendMsgHdr[0] = ntohs(2);
@@ -502,7 +501,6 @@ void process_data(TTcpConnectedPort* ConPort)
                     printf("WriteDataTcp %d\n", result);
                 if ((result = WriteDataTcp(ConPort, (unsigned char*)max_data.c_str(), sendlength)) != sendlength)
                     printf("WriteDataTcp %d\n", result);
-                printf("sent ->%s\n\n", max_data.c_str());
             }
 
             PerUserData->state = 2;
