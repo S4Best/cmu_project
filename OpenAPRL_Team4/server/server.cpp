@@ -618,7 +618,6 @@ string parseDbKey(string dbKeyPath)
     ss >> json;
 
     key = json["encKey"].asString();
-    cout << "encKey : " + key << endl;
     std::fill(dbkey.begin(), dbkey.end(), 0);
 
     return key;
