@@ -8,7 +8,6 @@
 #include "lgofficer.h"
 #include "lgofficerDlg.h"
 #include "afxdialogex.h"
-#include "sechelper.h"
 #include <string>
 
 #ifdef _DEBUG
@@ -434,72 +433,14 @@ void ClgofficerDlg::setUiEnable(lgc_state_e st)
 
 void ClgofficerDlg::OnClickedButtonEnc()
 {
-	std::vector<uint8_t> masterkey;
-	Blob mBlob;
-	std::vector<uint8_t>::iterator valueBytes;
-	std::string str;
-	int result = 0, rawLength = 0;
-
-	std::fill(masterkey.begin(), masterkey.end(), 0);
-	memset(&mBlob, 0, sizeof(Blob));
-
-	result = loadMasterBlob(masterkey_path, &mBlob);
-	if (result < 0)
-	{
-		setMsg(L"failed to load masterkey\n");
-		return;
-	}
-	setMsg(L"success to load masterkey\n");
-
-	rawLength = mBlob.length;
-	masterkey.resize(rawLength);
-	valueBytes = masterkey.begin();
-	for (int i = 0; i < rawLength; i++) {
-		valueBytes[i] = mBlob.value[i];
-	}
-
-	result = encryptAllData(AlertLogFile, &mBlob);
-	if (result < 1) {
-		setMsg(L"failed to decrypt plate info data\n");
-		return ;
-	}
-	setMsg(L"success to decrypt plate info data\n");
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	MessageBox(L"Success!", L"Encryption", MB_OK);
 }
 
 
 void ClgofficerDlg::OnClickedButtonDec()
 {
-	std::vector<uint8_t> masterkey;
-	Blob mBlob;
-	std::vector<uint8_t>::iterator valueBytes;
-	std::string str;
-	int result = 0, rawLength = 0;
-
-	std::fill(masterkey.begin(), masterkey.end(), 0);
-	memset(&mBlob, 0, sizeof(Blob));
-
-	result = loadMasterBlob(masterkey_path, &mBlob);
-	if (result < 0)
-	{
-		setMsg(L"failed to load masterkey\n");
-		return;
-	}
-	setMsg(L"success to load masterkey mBlob\n");
-
-	rawLength = mBlob.length;
-	masterkey.resize(rawLength);
-	valueBytes = masterkey.begin();
-	for (int i = 0; i < rawLength; i++) {
-		valueBytes[i] = mBlob.value[i];
-	}
-
-	result = decryptDatatoFile(EncAlertLogFile, masterkey, &mBlob);
-	if (result < 1) {
-		setMsg(L"failed to decrypt plate info data\n");
-		return;
-	}
-	setMsg(L"success to decrypt plate info data\n");
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	MessageBox(L"Success!", L"Decryption", MB_OK);
 }
 

@@ -112,13 +112,13 @@ static SSL_CTX* get_server_context(const char* ca_pem,
 	SSL_CTX* ctx = NULL;
 	unsigned char* pkey = NULL;
 	size_t pkey_size = 0;
+#if 0
 	std::vector<uint8_t> priv;
 	std::vector<uint8_t> masterkey;
 	Blob mBlob;
 	std::vector<uint8_t>::iterator valueBytes;
-	std::string str;
 	int result=0, rawLength=0;
-
+#endif
 	/* Get a default context */
 	if (!(ctx = SSL_CTX_new(TLS_server_method()))) {
 		printf("SSL_CTX_new failed");
@@ -140,52 +140,44 @@ static SSL_CTX* get_server_context(const char* ca_pem,
 		goto fail;
 	}
 
+#if 0
 	std::fill(priv.begin(), priv.end(), 0);
 	std::fill(masterkey.begin(), masterkey.end(), 0);
 	memset(&mBlob, 0, sizeof(Blob));
 
 	result = loadMasterBlob(masterkey_path, &mBlob);
-	if (result < 0)
+	if (result)
 	{
 		printf("failed to load masterkey\n");
 		goto fail;
 	}
 
 	rawLength = mBlob.length;
-	masterkey.resize(rawLength);
 	valueBytes = masterkey.begin();
 	for (int i = 0; i < rawLength; i++) {
 		valueBytes[i] = mBlob.value[i];
 	}
 
-	result = decryptDatatoBuffer(EncServerKeyFile, masterkey, priv);
-	if (result < 1) {
+	result = decryptData(EncServerKeyFile, masterkey, priv);
+	if (result != 1) {
 		printf("failed to decrypt private key : %d\n", (int)result);
 		goto fail;
 	}
 
-	str.assign(priv.begin(), priv.end());
-	std::fill(priv.begin(), priv.end(), 0);
-	priv = HexStringToByteArray(str);
-	if (priv.size() < 0)
-	{
-		printf("hexstring to bytearray failed\n");
-		goto fail;
-	}
-
 	/* Set the server's key for the above certificate */
-	pkey = (unsigned char *)malloc(priv.size());
-	memcpy(pkey, &priv[0], priv.size());
-
-	if (SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA2, ctx, pkey, priv.size()) != 1) {
+	if (SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA2, ctx, priv.data(), priv.size()) != 1) {
 		printf("Could not set the server's key\n");
 		goto fail;
 	}
-	std::fill(priv.begin(), priv.end(), 0);
-	if (pkey)
+
+#else
+	/* set the private key from KeyFile (may be the same as CertFile) */
+	if (SSL_CTX_use_PrivateKey_file(ctx, key_pem, SSL_FILETYPE_PEM) <= 0)
 	{
-		free(pkey);
+		printf("Cannot load client's key file\n");
+		goto fail;
 	}
+#endif	
 
 	/* We've loaded both certificate and the key, check if they match */
 	if (SSL_CTX_check_private_key(ctx) != 1) {
@@ -388,13 +380,13 @@ static SSL_CTX* get_client_context(const char* ca_pem,
 	SSL_CTX* ctx = NULL;
 	unsigned char* pkey = NULL;
 	size_t pkey_size = 0;
-	std::string str;
+#if 0
 	std::vector<uint8_t> priv;
 	std::vector<uint8_t> masterkey;
 	Blob mBlob;
 	std::vector<uint8_t>::iterator valueBytes;
 	int result = 0, rawLength = 0;
-
+#endif
 	/* Create a generic context */
 	if (!(ctx = SSL_CTX_new(TLS_client_method()))) {
 		printf("Cannot create a client context\n");
@@ -413,54 +405,43 @@ static SSL_CTX* get_client_context(const char* ca_pem,
 		goto fail;
 	}
 
+#if 0
 	std::fill(priv.begin(), priv.end(), 0);
 	std::fill(masterkey.begin(), masterkey.end(), 0);
 	memset(&mBlob, 0, sizeof(Blob));
 
 	result = loadMasterBlob(masterkey_path, &mBlob);
-	if (result < 1)
+	if (result)
 	{
 		printf("failed to load masterkey\n");
 		goto fail;
 	}
 
 	rawLength = mBlob.length;
-	masterkey.resize(rawLength);
 	valueBytes = masterkey.begin();
 	for (int i = 0; i < rawLength; i++) {
 		valueBytes[i] = mBlob.value[i];
 	}
 
-	result = decryptDatatoBuffer(EncClientKeyFile, masterkey, priv);
+	result = decryptData(EncClientKeyFile, masterkey, priv);
 	if (result != 1) {
 		printf("failed to decrypt private key : %d\n", (int)result);
 		goto fail;
 	}
-
-	str.assign(priv.begin(), priv.end());
-	std::fill(priv.begin(), priv.end(), 0);
-	priv = HexStringToByteArray(str);
-	if (priv.size() < 0)
-	{
-		printf("hexstring to bytearray failed\n");
-		goto fail;
-	}
-
-	/* Set the server's key for the above certificate */
-	pkey = (unsigned char*)malloc(priv.size());
-	memcpy(pkey, &priv[0], priv.size());
 
 	/* Set the client's key for the above certificate */
 	if (SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA2, ctx, priv.data(), priv.size()) != 1) {
 		printf("Could not set the server's key\n");
 		goto fail;
 	}
-	std::fill(priv.begin(), priv.end(), 0);
-	if (pkey)
+#else
+	/* set the private key from KeyFile (may be the same as CertFile) */
+	if (SSL_CTX_use_PrivateKey_file(ctx, key_pem, SSL_FILETYPE_PEM) <= 0)
 	{
-		free(pkey);
+		printf("Cannot load client's key file\n");
+		goto fail;
 	}
-
+#endif
 	/* Verify that the client's certificate and the key match */
 	if (SSL_CTX_check_private_key(ctx) != 1) {
 		printf("Client's certificate and key don't match\n");
@@ -639,6 +620,19 @@ TTcpConnectedPort* OpenTcpConnection(const char* remotehostname, const char* rem
 			Sleep(1000);
 		}
 
+		/*
+		// reset fd to blocking again. if do not this, recv() is non blocking
+		if ((arg = fcntl(sslfd, F_GETFL, NULL)) < 0) {
+			printf("fcntl block get failed");
+			goto error;
+		}
+
+		arg &= (~O_NONBLOCK);
+		if (fcntl(sslfd, F_SETFL, arg) < 0) {
+			printf("fcntl block set failed");
+			goto error;
+		}
+		*/
 	    mode = 0;
 	    ioctlsocket(sslfd, FIONBIO, &mode);
 		BIO_set_nbio(sbio, 0);
@@ -672,6 +666,19 @@ TTcpConnectedPort* OpenTcpConnection(const char* remotehostname, const char* rem
 		TcpConnectedPort->ctx = ctx;
 	}
 	else {
+	    /*
+		// Set non-blocking
+		if ((arg = fcntl(TcpConnectedPort->ConnectedFd, F_GETFL, NULL)) < 0) {
+			printf("fcntl nonblock get failed");
+			goto error;
+		}
+
+		arg |= O_NONBLOCK;
+		if (fcntl(TcpConnectedPort->ConnectedFd, F_SETFL, arg) < 0) {
+			printf("fcntl nonblock set failed");
+			goto error;
+		}
+		*/
 		// set addr info to connect
 		memset(&hints, 0, sizeof(struct addrinfo));
 		hints.ai_family = AF_UNSPEC;
