@@ -302,9 +302,7 @@ void CClientMachine::client_state_machine_thread()
                         MSG(mtype::mMsgWithConsole, "system malfunction, contact admin");
                         cm->getApp()->setStateText(_T("system malfunction"));
                     }
-                    MSG(mtype::mMsgWithConsole, "cipher initialization start");
-                    client_cipher_init();
-                    MSG(mtype::mMsgWithConsole, "cipher initialization done");
+
                     break;
                 case LGC_ST_CONNECTING:
                     MSG(mtype::mMsgWithConsole, "try to connect with server");

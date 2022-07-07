@@ -48,7 +48,6 @@ std::vector<uint8_t> HexStringToByteArray(std::string& data) {
 
 int AES_gcm_encrypt(const uint8_t* in, uint8_t* out, size_t len,
     const std::vector<uint8_t>& key, const uint8_t* iv, uint8_t* tag) {
-    printf("Entering function %s\n", __FUNCTION__);
 
     const EVP_CIPHER* cipher = EVP_aes_256_gcm();
     EVP_CIPHER_CTX_free_ptr ctx(EVP_CIPHER_CTX_new(), ::EVP_CIPHER_CTX_free);
@@ -78,7 +77,6 @@ int AES_gcm_encrypt(const uint8_t* in, uint8_t* out, size_t len,
 int AES_gcm_decrypt(const uint8_t* in, uint8_t* out, size_t len,
     const std::vector<uint8_t> key, const uint8_t* iv,
     const uint8_t* tag) {
-    printf("Entering function %s\n", __FUNCTION__);
 
     const EVP_CIPHER* cipher = EVP_aes_256_gcm();
 
@@ -112,7 +110,6 @@ int AES_gcm_decrypt(const uint8_t* in, uint8_t* out, size_t len,
 }
 
 size_t readFully(int fd, uint8_t* data, size_t size) {
-    printf("Entering function %s\n", __FUNCTION__);
     size_t remaining = size;
     int flag = 0;
     while (remaining > 0) {
@@ -133,12 +130,10 @@ size_t readFully(int fd, uint8_t* data, size_t size) {
 }
 
 size_t writeFully(int fd, uint8_t* data, size_t size) {
-    printf("Entering function %s\n", __FUNCTION__);
     size_t remaining = size;
     while (remaining > 0) {
         ssize_t n = _write(fd, data, remaining);
         if (n < 0) {
-            printf("write failed:\n");
             return size - remaining;
         }
         data += n;
@@ -156,7 +151,6 @@ bool generateSalt(std::vector<uint8_t>& mSalt) {
 }
 
 bool generateMasterKey(std::vector<uint8_t>& key) {
-    printf("Entering function %s", __FUNCTION__);
     key.resize(KEY_SIZE);
     if (!RAND_bytes(key.data(), key.size())) {
         return false;
@@ -184,8 +178,6 @@ void initBlob(const uint8_t* value, size_t valueLength, const uint8_t* info, uin
 
 
 int writeBlob(const std::string& filename, Blob* rawBlob) {
-    printf("Entering function %s\n", __FUNCTION__);
-
     const size_t dataLength = rawBlob->length;
     size_t fileLength = offsetof(blobv1, value) + dataLength + rawBlob->info;
 
@@ -214,39 +206,9 @@ int writeBlob(const std::string& filename, Blob* rawBlob) {
 }
 
 int readBlob(const std::string& filename, Blob* rawBlob) {
-    printf("Entering function %s\n", __FUNCTION__);
-
     size_t result;
     size_t fileLength;
-    int fh;
-
-    int in = _sopen_s(&fh, filename.c_str(), O_RDONLY, _SH_DENYNO, _S_IREAD);
-    if (in < 0) {
-        printf("blob.cpp readBlob in is lower than 0\n");
-        return -1;
-    }
-
-#if 0
-    struct stat filestatus;
-    stat(filename.c_str(), &filestatus);
-
-    std::cout << filestatus.st_size << " bytes\n";
     
-    // fileLength may be less than sizeof(mBlob)
-    flen = filestatus.st_size;
-    uint8_t* buffer = (uint8_t*)malloc(flen);
-    memset(buffer, 0, flen);
-  
-    printf("flen=%d\n", flen);
-
-    //const size_t fileLength = readFully(fh, reinterpret_cast<uint8_t*>(rawBlob), flen);
-    const size_t fileLength = readFully(fh, buffer, flen);
-    if (_close(fh) != 0)
-    {
-        printf("problem reading file\n");
-        return -1;
-    }
-#else
     std::vector<uint8_t> hexkeyblob;
     std::fill(hexkeyblob.begin(), hexkeyblob.end(), 0);
     std::vector<uint8_t> keyblob;
@@ -273,7 +235,6 @@ int readBlob(const std::string& filename, Blob* rawBlob) {
     }
     memcpy(rawBlob, keyblob.data(), keyblob.size());
     fileLength = keyblob.size();
-#endif   
 
     if (fileLength == 0) {
         printf("VALUE_CORRUPTED file length == 0");
@@ -291,9 +252,94 @@ int readBlob(const std::string& filename, Blob* rawBlob) {
     return fileLength;
 }
 
+int decryptDatatoBuffer(const std::string& filename, const std::vector<uint8_t>& aes_key, std::vector<uint8_t>& decData) {
+    int result = 0, fileLength = 0;
+
+    Blob rawBlob;
+    memset(&rawBlob, 0, sizeof(Blob));
+
+    std::vector<uint8_t> encData;
+    std::fill(encData.begin(), encData.end(), 0);
+    std::vector<uint8_t> decprivatekey;
+    std::fill(decprivatekey.begin(), decprivatekey.end(), 0);
+
+    fileLength = readBlob(filename, &rawBlob);
+    if (fileLength < 1) {
+        printf("decrypt blob failed to read encrypted private key : %d\n", (int)fileLength);
+        return fileLength;
+    }
+
+    const ssize_t encLength = rawBlob.length;
+
+    result = AES_gcm_decrypt(rawBlob.value /* in */, rawBlob.value /* out */, encLength,
+        aes_key, rawBlob.initialization_vector, rawBlob.tag);
+    if (result != 1) {
+        printf("failed to decrypt data : %d", (int)result);
+        return result;
+    }
+    ssize_t rawLength = rawBlob.length;
+
+
+    std::vector<uint8_t>::iterator valueBytes;
+    decData.resize(rawLength);
+    valueBytes = decData.begin();
+    for (int i = 0; i < rawLength; i++) {
+        valueBytes[i] = rawBlob.value[i];
+    }
+
+    //std::cout << "decrypted data:" << decData.data() << std::endl;
+    return result;
+}
+
+int decryptDatatoFile(const std::string& filename, const std::vector<uint8_t>& aes_key, Blob *rawBlob) {
+    //printf("Entering function % s\n", __FUNCTION__);
+
+    int result = 0, fileLength = 0;
+    std::vector<uint8_t> decData;
+    std::fill(decData.begin(), decData.end(), 0);
+
+    fileLength = readBlob(filename, rawBlob);
+    if (fileLength < 1) {
+        printf("decrypt blob failed to read encrypted data : %d\n", (int)fileLength);
+        return result;
+    }
+
+    const ssize_t encLength = rawBlob->length;
+
+    result = AES_gcm_decrypt(rawBlob->value /* in */, rawBlob->value /* out */, encLength,
+        aes_key, rawBlob->initialization_vector, rawBlob->tag);
+    if (result != 1) {
+        printf("failed to decrypt data : %d", (int)result);
+        return result;
+    }
+    ssize_t rawLength = rawBlob->length;
+
+
+    std::vector<uint8_t>::iterator valueBytes;
+    decData.resize(rawLength);
+    valueBytes = decData.begin();
+    for (int i = 0; i < rawLength; i++) {
+        valueBytes[i] = rawBlob->value[i];
+    }
+
+    size_t iSeperator = filename.find('.');
+
+    std::string sName1 = filename.substr(0, iSeperator);
+    std::size_t pos = sName1.rfind('_');
+
+    std::string sName2 = sName1.substr(0, pos);
+    std::string sName3 = filename.substr(iSeperator + 1);
+    std::string orgFilename = sName2 + "." + sName3;
+
+    std::ofstream ofile(orgFilename);
+    ofile << decData.data();
+    ofile.close();
+
+    //std::cout << "successfully stored original data on decryptDatatoFile" << std::endl;
+    return result;
+}
+
 int encryptData(const std::string& filename, const uint8_t* value, size_t valueLength,const uint8_t* info, uint8_t infoLength, const std::vector<uint8_t>& aes_key, Blob* rawBlob) {
-    printf("Entering function %s", __FUNCTION__);
-        
     memset(rawBlob->initialization_vector, 0, AES_BLOCK_SIZE);
     if (!RAND_bytes(rawBlob->initialization_vector, kGcmIvSizeBytes)) {
         printf("Filed to make iv to encrypt blob\n");
@@ -306,8 +352,6 @@ int encryptData(const std::string& filename, const uint8_t* value, size_t valueL
         return -1;
     }
 
-   // printf("rawBlob->length on encryptData=%d\n", rawBlob->length);
-
     result = writeBlob(filename, rawBlob);
     if (result < 1) {
         printf("Encrypt blob failed to save : %d\n", (int)result);
@@ -317,73 +361,10 @@ int encryptData(const std::string& filename, const uint8_t* value, size_t valueL
     return 1;
 }
 
-int decryptData(const std::string& filename, const std::vector<uint8_t>& aes_key, std::vector<uint8_t>& decData) {
-    printf("Entering function % s\n", __FUNCTION__);
 
-    int result = 0, fileLength = 0;
-    
-    Blob rawBlob;
-    memset(&rawBlob, 0, sizeof(Blob));
-
-    std::vector<uint8_t> encData;
-    std::fill(encData.begin(), encData.end(), 0);
-    std::vector<uint8_t> decprivatekey;
-    std::fill(decprivatekey.begin(), decprivatekey.end(), 0);
-   
-#if 1
-    fileLength = readBlob(filename, &rawBlob);
-    if (fileLength < 1) {
-        printf("decrypt blob failed to read encrypted private key : %d\n", (int)fileLength);
-        return result;
-    }
-#else
-    //read privatekey
-    std::fstream inputfile(KeyFile1);
-
-    if (inputfile.is_open()) {
-        std::copy(std::istream_iterator<uint8_t>(inputfile), std::istream_iterator<uint8_t>(), back_inserter(decprivatekey));
-        inputfile.close();
-    }
-    else {
-        std::cout << "Error opening file" << std::endl;
-        return -1;
-    }
-
-    std::string str(decprivatekey.begin(), decprivatekey.end());
-    encData = HexStringToByteArray(str);
-    if (result < 0)
-    {
-        printf("hexstring to bytearray failed\n");
-    }
-    memcpy(&rawBlob, encData.data(), encData.size());
-#endif
-
-    const ssize_t encLength = rawBlob.length;
-    //printf("encLength=%d\n", encLength);
-
-    result = AES_gcm_decrypt(rawBlob.value /* in */, rawBlob.value /* out */, encLength,
-        aes_key, rawBlob.initialization_vector, rawBlob.tag);
-    if (result != 1) {
-        printf("failed to decrypt data : %d", (int)result);
-        return result;
-    }
-    ssize_t rawLength = rawBlob.length;
-   
-    
-    std::vector<uint8_t>::iterator valueBytes;
-    decData.resize(rawLength);
-    valueBytes = decData.begin();
-    for (int i = 0; i < rawLength; i++) {
-        valueBytes[i] = rawBlob.value[i];
-    }
-
-    //std::cout << "decrypted data:" << decData.data() << std::endl;
-    return result;
-}
-
-int encryptPrivateKey(const std::string& filename, Blob* masterkey)
+int encryptAllData(const std::string& filename, Blob* masterkey)
 {
-    std::vector<uint8_t> privatekey;
+    std::vector<uint8_t> mEncData;
     std::vector<uint8_t> pSalt;
     std::vector<uint8_t> mMasterkey;
     int result = 0;
@@ -396,14 +377,11 @@ int encryptPrivateKey(const std::string& filename, Blob* masterkey)
         valueBytes[i] = masterkey->value[i];
     }
 
-    //std::string str2 = hexStr(mMasterkey.data(), mMasterkey.size());
-    //std::cout << "masterkey hex str2:" << str2 << std::endl;
-
     //read privatekey
     std::fstream inputfile(filename);
 
     if (inputfile.is_open()) {
-        std::copy(std::istream_iterator<uint8_t>(inputfile), std::istream_iterator<uint8_t>(), back_inserter(privatekey));
+        std::copy(std::istream_iterator<uint8_t>(inputfile), std::istream_iterator<uint8_t>(), back_inserter(mEncData));
         inputfile.close();
     }
     else {
@@ -417,79 +395,17 @@ int encryptPrivateKey(const std::string& filename, Blob* masterkey)
     std::string sName1 = filename.substr(0, iSeperator);
     std::string sName2 = filename.substr(iSeperator + 1);
     std::string encFilename = sName1 + "_enc." + sName2;
-    
-    generateSalt(pSalt);
-    Blob encpkey;
-    initBlob(privatekey.data(), privatekey.size(), pSalt.data(), pSalt.size(), &encpkey);
 
-    result = encryptData(encFilename, privatekey.data(), privatekey.size(), pSalt.data(), pSalt.size(), mMasterkey, &encpkey);
+    generateSalt(pSalt);
+    Blob encdata;
+    initBlob(mEncData.data(), mEncData.size(), pSalt.data(), pSalt.size(), &encdata);
+
+    result = encryptData(encFilename, mEncData.data(), mEncData.size(), pSalt.data(), pSalt.size(), mMasterkey, &encdata);
     if (result < 1) {
         printf("encryptPriv failed : %d\n", (int)result);
         return -1;
     }
 
-    std::cout << "successfully encrypted private key:"<< std::endl;
-    return 1;
-#if 0
-    std::vector<uint8_t> decpriv;
-    result = decryptData(KeyFile1, mMasterkey, decpriv);
-    if (result != 1) {
-        printf("failed to decrypt private key : %d\n", (int)result);
-        return-1;
-    }
-
-    for (int i = 0; i < decpriv.size(); i++)
-        std::cout << decpriv[i];
-#endif
-}
-
-int encryptDBkey(const std::string& filename, Blob* masterkey)
-{
-    std::vector<uint8_t> dbkey;
-    std::vector<uint8_t> pSalt;
-    std::vector<uint8_t> mMasterkey;
-    int result = 0;
-
-    ssize_t rawLength = masterkey->length;
-    std::vector<uint8_t>::iterator valueBytes;
-    mMasterkey.resize(rawLength);
-    valueBytes = mMasterkey.begin();
-    for (int i = 0; i < rawLength; i++) {
-        valueBytes[i] = masterkey->value[i];
-    }
-
-    //std::string str2 = hexStr(mMasterkey.data(), mMasterkey.size());
-    //std::cout << "masterkey hex str2:" << str2 << std::endl;
-
-    //read db key
-    std::fstream inputfile(filename);
-
-    if (inputfile.is_open()) {
-        std::copy(std::istream_iterator<uint8_t>(inputfile), std::istream_iterator<uint8_t>(), back_inserter(dbkey));
-        inputfile.close();
-    }
-    else {
-        std::cout << "Error opening file" << std::endl;
-        return -1;
-    }
-
-    size_t iSeperator = filename.find('.');
-
-    std::string sName1 = filename.substr(0, iSeperator);
-    std::string sName2 = filename.substr(iSeperator + 1);
-    std::string encFilename = sName1 + "_enc." + sName2;
- 
-    generateSalt(pSalt);
-    Blob encpkey;
-    initBlob(dbkey.data(), dbkey.size(), pSalt.data(), pSalt.size(), &encpkey);
-
-    result = encryptData(encFilename, dbkey.data(), dbkey.size(), pSalt.data(), pSalt.size(), mMasterkey, &encpkey);
-    if (result < 1) {
-        printf("encryptPriv failed : %d\n", (int)result);
-        return -1;
-    }
-    
-    std::cout << "successfully encryte DB Key files" << std::endl;
     return 1;
 }
 
@@ -501,28 +417,12 @@ int loadMasterBlob(const std::string& filename, Blob* mBlob)
     int result = 0;
 
     if (_access(filename.c_str(), F_OK) == 0) {
-        std::cout << "file is already exist\n" << std::endl;
 
         result = readBlob(filename, mBlob);
         if (result < 1) {
             printf("readBlob failed to read masterkey : %d\n", (int)result);
             return -1;
         }
-
-        /*
-        std::vector<uint8_t> mMasterkey;
-
-        ssize_t rawLength = mBlob->length;
-        std::vector<uint8_t>::iterator valueBytes;
-        mMasterkey.resize(rawLength);
-        valueBytes = mMasterkey.begin();
-        for (int i = 0; i < rawLength; i++) {
-            valueBytes[i] = mBlob->value[i];
-        }
-
-        std::string str2 = hexStr(mMasterkey.data(), mMasterkey.size());
-        std::cout << "masterkey hex str2:" << str2 << std::endl;
-        */
     }
     else {
         std::fill(mKey.begin(), mKey.end(), 0);
@@ -534,10 +434,6 @@ int loadMasterBlob(const std::string& filename, Blob* mBlob)
         infoLength = salt.size();
         valueLength = mKey.size();
 
-        //std::string str = hexStr(mKey.data(),mKey.size());
-        //std::cout <<"masterkey hex str1:" << str << std::endl;
-
-
         memset(mBlob, 0, sizeof(Blob));
         initBlob(mKey.data(), mKey.size(), salt.data(), salt.size(), mBlob);
         result = writeBlob(filename, mBlob);
@@ -547,114 +443,6 @@ int loadMasterBlob(const std::string& filename, Blob* mBlob)
             return -1;
         }
     }
-
-    std::cout << "successfully generated and loaded master key" << std::endl;
     return 1;
 }
-
-int server_cipher_init()
-{
-    std::vector<uint8_t> mKey;
-    std::vector<uint8_t> salt;
-    uint8_t valueLength, infoLength;
-    Blob mBlob;
-    int result = 0;
-
-    result = loadMasterBlob(masterkey_path, &mBlob);
-    if (result < 0) {
-        std::cout << "failed to generate or Masterkey\n" << std::endl;
-        return -1;
-    }
-
-    result = encryptPrivateKey(ServerKeyFile, &mBlob);
-    if (result < 0)
-    {
-        printf("failed to encrypt privateKey\n");
-        return -1;
-    }
-#if 1
-    result = encryptDBkey(AccountDBKeyFile, &mBlob);
-    if (result < 0)
-    {
-        printf("failed to encrypt DBKey files\n");
-        return -1;
-    }
-    result = encryptDBkey(OtpDBKeyFile, &mBlob);
-    if (result < 0)
-    {
-        printf("failed to encrypt DBKey files\n");
-        return -1;
-    }
-    result = encryptDBkey(PlateDBKeyFile, &mBlob);
-    if (result < 0)
-    {
-        printf("failed to encrypt DBKey files\n");
-        return -1;
-    }
-#endif
-    return 1;
-#if 0
-    //read privatekey
-    std::vector<uint8_t> privatekey;
-    std::vector<uint8_t> pSalt;
-    std::fstream inputfile(KeyFile);
-
-    if (inputfile.is_open()) {
-        std::copy(std::istream_iterator<uint8_t>(inputfile), std::istream_iterator<uint8_t>(), back_inserter(privatekey));
-        inputfile.close();
-    }
-    else {
-        std::cout << "Error opening file" << std::endl;
-        return;
-    }        
-    
-    std::cout <<"private key:" << privatekey.data() << std::endl << std::endl;
-
-    generateSalt(pSalt);
-    Blob encpkey;
-    initBlob(privatekey.data(), privatekey.size(), pSalt.data(), pSalt.size(), &encpkey);
-
-    result = encryptData(KeyFile1,privatekey.data(), privatekey.size(), pSalt.data(), pSalt.size(), mMasterkey, &encpkey);
-    if (result != 1) {
-        printf("encryptPriv failed : %d\n", (int)result);
-        return;
-    }
-
-    std::vector<uint8_t> decpriv;
-    result = decryptData(KeyFile1, mMasterkey, decpriv);
-    if (result != 1) {
-        printf("failed to decrypt private key : %d\n", (int)result);
-        return;
-    }
-
-    for (int i = 0; i < decpriv.size(); i++)
-        std::cout << decpriv[i];
-#endif
-}
-
-
-int client_cipher_init()
-{
-    std::vector<uint8_t> mKey;
-    std::vector<uint8_t> salt;
-    uint8_t valueLength, infoLength;
-    Blob mBlob;
-    int result = 0;
-     
-    result = loadMasterBlob(masterkey_path, &mBlob);
-    if (result < 0) {
-        std::cout << "failed to generate or Masterkey\n" << std::endl;
-        return -1;
-    }
-
-    result = encryptPrivateKey(ClientKeyFile, &mBlob);
-    if (result < 0) 
-    {
-        printf("failed to encrypt privateKey\n");
-        return -1;
-    }
-
-    return 1;
-}
-
 

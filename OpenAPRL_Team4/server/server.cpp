@@ -16,6 +16,7 @@
 #include "Account.h"
 #include "WinOTP.hpp"
 #include "rapidfuzz/fuzz.hpp"
+#include "sechelper.h"
 #include <thread>
 #include <vector>
 #include <string>
@@ -578,10 +579,46 @@ string parseDbKey(string dbKeyPath)
         return key;
     }
 
+    std::vector<uint8_t> dbkey;
+    std::vector<uint8_t> masterkey;
+    Blob mBlob;
+    std::vector<uint8_t>::iterator valueBytes;
+    std::string str;
+    int result = 0, rawLength = 0;
+
+    std::fill(dbkey.begin(), dbkey.end(), 0);
+    std::fill(masterkey.begin(), masterkey.end(), 0);
+    memset(&mBlob, 0, sizeof(Blob));
+
+    result = loadMasterBlob(masterkey_path, &mBlob);
+    if (result < 0)
+    {
+        printf("failed to load masterkey\n");
+        return NULL;
+    }
+
+    rawLength = mBlob.length;
+    masterkey.resize(rawLength);
+    valueBytes = masterkey.begin();
+    for (int i = 0; i < rawLength; i++) {
+        valueBytes[i] = mBlob.value[i];
+    }
+
+    result = decryptDatatoBuffer(dbKeyPath, masterkey, dbkey);
+    if (result < 1) {
+        printf("failed to decrypt db key : %d\n", (int)result);
+        return NULL;
+    }
+     
+    char buf[256] = { 0, };
+    memcpy(buf, dbkey.data(), dbkey.size());
+    std::string bstr = std::string(buf);
+    std::istringstream ss(bstr);
     Json::Value json;
-    stream >> json;
+    ss >> json;
 
     key = json["encKey"].asString();
+    std::fill(dbkey.begin(), dbkey.end(), 0);
 
     return key;
 }
